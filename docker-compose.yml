@@ -1,77 +1,20 @@
-name: affine
+name: trilium
 services:
-  affine:
-    image: ghcr.io/toeverything/affine:${AFFINE_REVISION:-stable}
-    container_name: affine_server
+  trilium:
+    image: triliumnext/trilium:latest
+    container_name: trilium_server
+    restart: unless-stopped
     ports:
-      - '${PORT:-3010}:3010'
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-      affine_migration:
-        condition: service_completed_successfully
-    volumes:
-      - ${UPLOAD_LOCATION}:/root/.affine/storage
-      - ${CONFIG_LOCATION}:/root/.affine/config
-      # Research folders mounted into the container
-      - ./charts:/research/charts
-      - ./chem:/research/chem
-      - ./cloud-chamber:/research/cloud-chamber
-      - ./crypto:/research/crypto
-      - ./refrigeration:/research/refrigeration
-      - ./school-search:/research/school-search
-    env_file:
-      - .env
+      - '${PORT:-8080}:8080'
     environment:
-      - REDIS_SERVER_HOST=redis
-      - DATABASE_URL=postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres:5432/${DB_DATABASE:-affine}
-      - AFFINE_INDEXER_ENABLED=false
-    restart: unless-stopped
-
-  affine_migration:
-    image: ghcr.io/toeverything/affine:${AFFINE_REVISION:-stable}
-    container_name: affine_migration_job
+      - TRILIUM_DATA_DIR=/home/node/trilium-data
     volumes:
-      - ${UPLOAD_LOCATION}:/root/.affine/storage
-      - ${CONFIG_LOCATION}:/root/.affine/config
-    command: ['sh', '-c', 'node ./scripts/self-host-predeploy.js']
-    env_file:
-      - .env
-    environment:
-      - REDIS_SERVER_HOST=redis
-      - DATABASE_URL=postgresql://${DB_USERNAME}:${DB_PASSWORD}@postgres:5432/${DB_DATABASE:-affine}
-      - AFFINE_INDEXER_ENABLED=false
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-
-  redis:
-    image: redis
-    container_name: affine_redis
-    healthcheck:
-      test: ['CMD', 'redis-cli', '--raw', 'incr', 'ping']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  postgres:
-    image: pgvector/pgvector:pg16
-    container_name: affine_postgres
-    volumes:
-      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_DB: ${DB_DATABASE:-affine}
-      POSTGRES_INITDB_ARGS: '--data-checksums'
-    healthcheck:
-      test: ['CMD', 'pg_isready', '-U', "${DB_USERNAME}", '-d', "${DB_DATABASE:-affine}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
+      # Persistent Trilium database and config
+      - ${TRILIUM_DATA_DIR:-~/trilium-data}:/home/node/trilium-data
+      # Research folders mounted read-only for import
+      - ./charts:/research/charts:ro
+      - ./chem:/research/chem:ro
+      - ./cloud-chamber:/research/cloud-chamber:ro
+      - ./crypto:/research/crypto:ro
+      - ./refrigeration:/research/refrigeration:ro
+      - ./school-search:/research/school-search:ro
