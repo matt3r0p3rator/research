@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dutch Education Research Portal</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #f8fafc;
+            color: #334155;
+            line-height: 1.6;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #0066cc 0%, #004499 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+        
+        .container {
+            display: flex;
+            height: calc(100vh - 120px);
+            max-width: 1400px;
+            margin: 0 auto;
+            gap: 2rem;
+            padding: 2rem;
+        }
+        
+        .sidebar {
+            width: 320px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            padding: 1.5rem;
+            overflow-y: auto;
+            max-height: 100%;
+        }
+        
+        .sidebar h3 {
+            color: #1e293b;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #e2e8f0;
+            font-size: 1.1rem;
+        }
+        
+        .file-list {
+            list-style: none;
+        }
+        
+        .file-list li {
+            margin: 0.5rem 0;
+        }
+        
+        .file-list a {
+            display: block;
+            padding: 0.75rem 1rem;
+            text-decoration: none;
+            color: #475569;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+        }
+        
+        .file-list a:hover {
+            background-color: #f1f5f9;
+            color: #0066cc;
+            border-left: 3px solid #0066cc;
+        }
+        
+        .file-list a.active {
+            background-color: #eff6ff;
+            color: #0066cc;
+            border-left: 3px solid #0066cc;
+            font-weight: 500;
+        }
+        
+        .content {
+            flex: 1;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .content-header {
+            background-color: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 1rem 2rem;
+        }
+        
+        .content-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1e293b;
+        }
+        
+        .markdown-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+            max-width: none;
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            color: #64748b;
+            font-style: italic;
+        }
+        
+        /* Markdown Styling */
+        .markdown-content h1 {
+            color: #1e293b;
+            font-size: 2rem;
+            font-weight: 700;
+            margin: 0 0 1.5rem 0;
+            padding-bottom: 0.5rem;
+            border-bottom: 3px solid #0066cc;
+        }
+        
+        .markdown-content h2 {
+            color: #334155;
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem 0;
+            padding-bottom: 0.25rem;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        
+        .markdown-content h3 {
+            color: #475569;
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 1.5rem 0 0.75rem 0;
+        }
+        
+        .markdown-content h4 {
+            color: #64748b;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 1rem 0 0.5rem 0;
+        }
+        
+        .markdown-content p {
+            margin: 0 0 1rem 0;
+            color: #374151;
+        }
+        
+        .markdown-content ul, .markdown-content ol {
+            margin: 0 0 1rem 1.5rem;
+            color: #374151;
+        }
+        
+        .markdown-content li {
+            margin: 0.25rem 0;
+        }
+        
+        .markdown-content strong {
+            background-color: #fef3c7;
+            padding: 0.1rem 0.3rem;
+            border-radius: 3px;
+            font-weight: 600;
+            color: #92400e;
+        }
+        
+        .markdown-content code {
+            background-color: #f1f5f9;
+            color: #dc2626;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 0.9rem;
+        }
+        
+        .markdown-content pre {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            overflow-x: auto;
+        }
+        
+        .markdown-content pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+        
+        .markdown-content blockquote {
+            border-left: 4px solid #0066cc;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: #64748b;
+            font-style: italic;
+            background-color: #f8fafc;
+            padding: 1rem 1rem 1rem 2rem;
+            border-radius: 0 8px 8px 0;
+        }
+        
+        .markdown-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .markdown-content th {
+            background-color: #0066cc;
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+        
+        .markdown-content td {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .markdown-content tr:hover {
+            background-color: #f8fafc;
+        }
+        
+        .markdown-content a {
+            color: #0066cc;
+            text-decoration: none;
+            font-weight: 500;
+            border-bottom: 1px dashed #0066cc;
+        }
+        
+        .markdown-content a:hover {
+            color: #004499;
+            border-bottom: 1px solid #004499;
+        }
+        
+        .toc {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin: 1.5rem 0;
+        }
+        
+        .toc h4 {
+            margin: 0 0 1rem 0;
+            color: #1e293b;
+            font-size: 1.1rem;
+        }
+        
+        .toc ul {
+            margin: 0;
+            padding-left: 1.5rem;
+        }
+        
+        .toc a {
+            color: #475569;
+            text-decoration: none;
+            font-size: 0.9rem;
+            border-bottom: none;
+        }
+        
+        .toc a:hover {
+            color: #0066cc;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                padding: 1rem;
+                gap: 1rem;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+                max-height: 300px;
+            }
+            
+            .markdown-content {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>🇳🇱 Dutch Education Research Portal</h1>
+        <p>Complete guide for American students considering higher education in the Netherlands</p>
+    </header>
+    
+    <div class="container">
+        <nav class="sidebar">
+            <h3>📚 Research Documents</h3>
+            <ul class="file-list" id="fileList">
+                <!-- Dynamic content -->
+            </ul>
+        </nav>
+        
+        <main class="content">
+            <div class="content-header">
+                <h2 class="content-title" id="contentTitle">Select a document to begin</h2>
+            </div>
+            <div class="markdown-content" id="markdownContent">
+                <div class="loading">
+                    <p>👋 Welcome to the Dutch Education Research Portal! Select a research document from the sidebar to get started.</p>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Simple Markdown Parser
+        function parseMarkdown(markdown) {
+            let html = markdown;
+            
+            // Headers
+            html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+            html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+            html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+            html = html.replace(/^#### (.*$)/gim, '<h4>$1</h4>');
+            
+            // Bold
+            html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            
+            // Italic
+            html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            // Code blocks
+            html = html.replace(/```([^`]*)```/g, '<pre><code>$1</code></pre>');
+            
+            // Inline code
+            html = html.replace(/`([^`]*)`/g, '<code>$1</code>');
+            
+            // Links
+            html = html.replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+            
+            // Lists
+            html = html.replace(/^\* (.*)$/gim, '<li>$1</li>');
+            html = html.replace(/^\- (.*)$/gim, '<li>$1</li>');
+            html = html.replace(/^(\d+)\. (.*)$/gim, '<li>$2</li>');
+            
+            // Wrap consecutive list items in ul tags
+            html = html.replace(/(<li>.*<\/li>)/gs, function(match) {
+                if (match.includes('<li>') && !match.includes('<ul>')) {
+                    return '<ul>' + match + '</ul>';
+                }
+                return match;
+            });
+            
+            // Blockquotes
+            html = html.replace(/^> (.*)$/gim, '<blockquote>$1</blockquote>');
+            
+            // Line breaks
+            html = html.replace(/\n\n/g, '</p><p>');
+            html = html.replace(/\n/g, '<br>');
+            
+            // Wrap content in paragraphs
+            html = '<p>' + html + '</p>';
+            
+            // Clean up empty paragraphs
+            html = html.replace(/<p><\/p>/g, '');
+            html = html.replace(/<p>(<h[1-6])/g, '$1');
+            html = html.replace(/(<\/h[1-6]>)<\/p>/g, '$1');
+            html = html.replace(/<p>(<ul)/g, '$1');
+            html = html.replace(/(<\/ul>)<\/p>/g, '$1');
+            html = html.replace(/<p>(<blockquote)/g, '$1');
+            html = html.replace(/(<\/blockquote>)<\/p>/g, '$1');
+            html = html.replace(/<p>(<pre)/g, '$1');
+            html = html.replace(/(<\/pre>)<\/p>/g, '$1');
+            
+            return html;
+        }
+
+        // File manifest
+        const files = [
+            {
+                name: 'complete-guide-dutch-education-american-students.md',
+                title: '📖 Complete Guide to Dutch Education',
+                description: 'Comprehensive guide covering all aspects of Dutch higher education for American students'
+            },
+            {
+                name: 'dutch-education-summary.md',
+                title: '⚡ Executive Summary',
+                description: 'Quick overview and key decision-making information'
+            },
+            {
+                name: 'dutch-universities-for-american-students.md',
+                title: '🏛️ Universities & Programs Guide',
+                description: 'Top Dutch universities, rankings, and program information'
+            },
+            {
+                name: 'netherlands-student-life-cultural-guide-us-students.md',
+                title: '🏠 Student Life & Cultural Guide',
+                description: 'Daily life, cultural integration, and practical living tips'
+            },
+            {
+                name: 'netherlands-post-graduation-career-opportunities-us-students.md',
+                title: '🚀 Career Opportunities Guide',
+                description: 'Post-graduation employment, EU citizenship, and career prospects'
+            },
+            {
+                name: 'netherlands-student-visa-immigration-guide-2026.md',
+                title: '🛂 Visa & Immigration Guide',
+                description: 'Complete visa application process and immigration requirements'
+            }
+        ];
+
+        // Generate table of contents from headers
+        function generateTOC(content) {
+            const headers = content.match(/<h[1-4][^>]*>([^<]+)<\/h[1-4]>/g);
+            if (!headers || headers.length === 0) return '';
+            
+            let toc = '<div class="toc"><h4>📋 Table of Contents</h4><ul>';
+            headers.forEach((header, index) => {
+                const level = header.match(/<h([1-4])/)[1];
+                const text = header.match(/>([^<]+)</)[1];
+                const id = `header-${index}`;
+                const indent = level > 2 ? 'margin-left: 1rem;' : '';
+                toc += `<li style="${indent}"><a href="#${id}" onclick="scrollToHeader('${id}')">${text}</a></li>`;
+            });
+            toc += '</ul></div>';
+            
+            return toc;
+        }
+
+        // Scroll to header function
+        function scrollToHeader(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // Add IDs to headers for navigation
+        function addHeaderIds(content) {
+            let headerIndex = 0;
+            return content.replace(/<h([1-4])([^>]*)>([^<]+)<\/h[1-4]>/g, function(match, level, attrs, text) {
+                const id = `header-${headerIndex++}`;
+                return `<h${level}${attrs} id="${id}">${text}</h${level}>`;
+            });
+        }
+
+        // Load and display a file
+        async function loadFile(filename) {
+            const contentDiv = document.getElementById('markdownContent');
+            const titleDiv = document.getElementById('contentTitle');
+            
+            // Update active file in sidebar
+            document.querySelectorAll('.file-list a').forEach(a => a.classList.remove('active'));
+            document.querySelector(`[data-file="${filename}"]`).classList.add('active');
+            
+            // Show loading
+            contentDiv.innerHTML = '<div class="loading">Loading...</div>';
+            
+            try {
+                // Since we can't actually fetch files, we'll show a template
+                const file = files.find(f => f.name === filename);
+                titleDiv.textContent = file.title;
+                
+                const content = getFileContent(filename);
+                const parsed = parseMarkdown(content);
+                const withIds = addHeaderIds(parsed);
+                const toc = generateTOC(withIds);
+                
+                contentDiv.innerHTML = toc + withIds;
+            } catch (error) {
+                contentDiv.innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: #ef4444;">
+                        <h3>📄 Document Preview Not Available</h3>
+                        <p>This is a demo viewer. In the actual implementation, the content would be loaded from: <strong>${filename}</strong></p>
+                        <p>The viewer supports:</p>
+                        <ul style="text-align: left; max-width: 500px; margin: 1rem auto;">
+                            <li>✅ Dynamic markdown rendering</li>
+                            <li>✅ Table of contents generation</li>
+                            <li>✅ Inter-document navigation</li>
+                            <li>✅ Responsive design</li>
+                            <li>✅ Offline functionality</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+
+        // Template content for demonstration
+        function getFileContent(filename) {
+            const templates = {
+                'complete-guide-dutch-education-american-students.md': `# The Complete Guide to Dutch Higher Education for American Students
+
+## 📋 Executive Summary
+
+**Why the Netherlands is an Exceptional Choice for American Students:**
+
+The Netherlands offers world-class higher education at a fraction of US private university costs, with over 1,800 English-taught programs, shorter degree completion times, and pathways to European career opportunities.
+
+### Key Benefits:
+- **50-70% cost savings** compared to private US universities
+- **Access to top-100 global universities** across multiple fields
+- **EU work authorization** and citizenship pathways
+- **Exceptional employment outcomes** (97% graduate employment rate)
+
+## 🎓 Understanding the Dutch Higher Education System
+
+### Research Universities vs Universities of Applied Sciences
+
+The Netherlands operates a unique **binary higher education system**:
+
+#### Research Universities (Universiteiten/WO)
+- 14 institutions serving 240,000 students
+- Academic/research focus
+- 3-year Bachelor's degrees (vs 4 years in US)
+- Global rankings: Multiple universities in world top-100
+
+#### Universities of Applied Sciences (HBO)
+- 37+ institutions with strong industry connections
+- Professional/practical focus
+- 4-year Bachelor's programs including internships
+
+## 💰 Cost Analysis
+
+### Total Investment Comparison
+- **Dutch Bachelor's degree:** €80,000-€140,000 total
+- **US Private university:** $200,000-$300,000 total
+- **Net savings:** $100,000-$200,000
+
+*This is a preview of the comprehensive guide. The full document contains detailed sections on admissions, top universities, application processes, visa requirements, and post-graduation opportunities.*`,
+
+                'dutch-education-summary.md': `# Dutch Education Research Summary
+
+## 🎯 Quick Decision Framework
+
+**Is Dutch Higher Education Right for Your Family?**
+
+Answer these key questions:
+- Are you comfortable with 50-70% cost savings vs US private universities?
+- Is your student interested in international career opportunities?
+- Can you manage cultural adjustment and Dutch weather?
+- Are you prepared for more academic independence?
+
+## 💰 Financial Overview
+
+### Total Investment
+- **3-Year Bachelor's:** €58,500-€118,200
+- **Living costs included:** €22,000-€45,000 annually
+- **Total savings vs US private:** $100,000-$200,000
+
+### Top Scholarships
+- **Holland Scholarship:** €5,000 first year
+- **Orange Tulip Scholarship:** €3,000-€24,000 annually
+- **University Excellence:** €5,000-full tuition
+
+## 🏛️ Top Universities
+1. **Delft University of Technology** - #2 worldwide Civil Engineering
+2. **University of Amsterdam** - #1 worldwide Communication Studies  
+3. **Wageningen University** - #1 worldwide Agriculture/Food Science
+4. **Leiden University** - Historic excellence, strong liberal arts
+
+## ⏰ Critical Timeline
+- **Sophomore Year:** Research and academic preparation
+- **Junior Year:** Testing, applications, scholarships
+- **January 15:** Competitive program deadlines
+- **May 1:** Standard program deadlines
+
+## 🚀 Career Outcomes
+- **97% employment rate** within 12 months
+- **Starting salaries:** €45,000-€85,000
+- **EU citizenship pathway:** 5-year route to permanent residence
+- **30% tax ruling:** Additional €5,000-€15,000 take-home annually`,
+
+                'dutch-universities-for-american-students.md': `# Dutch Universities Guide for American Students
+
+## 🏆 Top Research Universities
+
+### 1. Delft University of Technology (TU Delft)
+- **Global Ranking:** #47 overall, #2 Civil Engineering
+- **Strengths:** Aerospace (#2), Architecture (#3), Technology
+- **For Americans:** Strong Silicon Valley connections, English programs
+- **Notable:** Graduates work at Boeing, Airbus, Tesla
+
+### 2. University of Amsterdam (UvA)
+- **Global Ranking:** #53 overall
+- **Strengths:** Communication Studies (#1), Psychology (#14)
+- **Programs:** Amsterdam University College - liberal arts
+- **Location:** Heart of Amsterdam, vibrant student life
+
+### 3. Wageningen University & Research
+- **Global Ranking:** #1 Agriculture & Food Sciences
+- **Focus:** Environmental sciences, sustainability, life sciences
+- **Career Prospects:** High demand in growing green economy
+- **Research:** Leading climate change and food security research
+
+### 4. Leiden University
+- **Founded:** 1575 - oldest in Netherlands
+- **Strengths:** Law (#23), International Relations, Medicine
+- **Notable:** 16 Nobel Prize winners, beautiful historic campus
+- **Programs:** Strong pre-law preparation, liberal arts tradition
+
+## 🏢 Top Universities of Applied Sciences
+
+### 1. The Hague University of Applied Sciences
+- **Location:** Political capital with internship opportunities
+- **Strengths:** International Business, Security Studies
+- **Advantage:** Diplomatic community connections
+
+### 2. Amsterdam University of Applied Sciences
+- **Strengths:** Business, Media, Engineering
+- **Industry:** Major Amsterdam company partnerships
+- **Practical:** Guaranteed internships, career focus
+
+## 🎓 University Colleges (Liberal Arts)
+- **Amsterdam University College:** 200 students/year, highly selective
+- **University College Utrecht:** Interdisciplinary, US-style education
+- **University College Roosevelt:** Located on former abbey island
+
+*Each offers small, international programs combining American liberal arts with European perspectives.*`,
+
+                'netherlands-student-life-cultural-guide-us-students.md': `# Student Life & Cultural Guide: Netherlands
+
+## 🏠 Housing Reality Check
+
+**The Challenge:** Severe housing shortage with 200+ applications per room
+
+### Housing Options:
+1. **Student Housing Corporations:** €400-600/month, waiting lists
+2. **Private Student Complexes:** €600-900/month, faster availability  
+3. **Room Rentals:** €500-800/month, cultural immersion
+4. **Homestays:** €600-800/month including meals
+
+### Survival Strategy:
+- Register immediately after acceptance
+- Join Facebook housing groups
+- Prepare complete documentation
+- Have backup plans ready
+
+## 🚲 Transportation & Cycling Culture
+
+**Essential:** 99% of students own bicycles
+
+### Cycling Requirements:
+- Quality used bike: €150-400
+- LED lights (legally required)
+- Multiple locks (theft prevention)
+- Rain gear for year-round cycling
+
+### Public Transport:
+- **Student OV:** €34/month unlimited train travel
+- **OV-chipkaart:** Universal payment card
+- **Coverage:** Reach any city within 3 hours
+
+## 🗣️ Cultural Adjustments
+
+### Dutch Directness:
+- Matter-of-fact communication style
+- Less small talk, more efficiency
+- Direct feedback is normal and helpful
+- Challenge ideas openly in academic settings
+
+### Social Integration:
+- Join student associations (verenigingen)
+- Sports clubs for fastest friendship building
+- Dutch friendships develop slowly but deeply
+- Activity-based bonding vs proximity-based
+
+## 🌧️ Weather & Seasonal Considerations
+
+**Reality for Californians:**
+- **Winter:** 35-45°F, 8 hours daylight, constant gray
+- **Summer:** 60-75°F, pleasant but often cloudy
+- **Essential gear:** Quality rain jacket, warm layers
+
+### Seasonal Affective Disorder:
+- Light therapy lamps recommended
+- Vitamin D supplementation essential
+- Plan European travel during darkest months
+
+## 🏥 Healthcare System
+
+**Mandatory Insurance:** €100-130/month
+**Government Subsidy:** €110/month available
+**Coverage:** Comprehensive including mental health
+**GP System:** Required registration, referral-based
+
+## 🎯 Integration Success Tips
+
+1. **Learn basic Dutch** - opens significantly more opportunities
+2. **Join sports clubs** - fastest path to Dutch friendships  
+3. **Embrace cycling culture** - essential for daily life
+4. **Understand directness** - efficiency focused, not rude
+5. **Plan for weather** - invest in proper gear and mental health support`,
+
+                'netherlands-post-graduation-career-opportunities-us-students.md': `# Post-Graduation Career Opportunities
+
+## 🎯 Employment Authorization
+
+### Immediate Benefits:
+- **1-Year Search Permit:** Automatic for all graduates
+- **Unlimited Work Authorization:** No employer sponsorship required
+- **97% Employment Rate:** International graduates find jobs within 12 months
+
+## 💰 Starting Salaries by Field
+
+### Technology & Engineering:
+- **Software Engineering:** €55,000-€75,000 
+- **Data Science/AI:** €60,000-€80,000
+- **Aerospace Engineering:** €50,000-€70,000
+
+### Business & Finance:
+- **Management Consulting:** €65,000-€85,000 (top firms)
+- **Financial Services:** €50,000-€75,000
+- **Marketing/Sales:** €40,000-€60,000
+
+### Life Sciences:
+- **Biotechnology:** €45,000-€65,000
+- **Environmental Science:** €40,000-€58,000
+
+## 🏢 Major Employers
+
+**Technology:** ASML, Booking.com, Adyen, Netflix European HQ
+**Financial:** ING Bank, ABN AMRO, JPMorgan European operations
+**Consulting:** McKinsey, BCG, Bain - major European offices
+**Energy:** Shell, BP, renewable energy leaders
+
+## 🇪🇺 EU Citizenship Pathway
+
+### 5-Year Route:
+- **Student years count** toward residency requirement
+- **Integration course** and basic Dutch language required
+- **Clean record** and financial stability demonstrated
+- **Processing time:** 12-18 months after application
+
+### EU Citizenship Benefits:
+- **Work anywhere in EU:** 27 countries, 500+ million person market
+- **Dutch passport:** #4 globally for visa-free travel
+- **Social benefits:** Healthcare, education, retirement across EU
+- **Political rights:** Vote in local and EU elections
+
+## 💎 30% Tax Ruling
+
+**Major Financial Benefit for International Workers:**
+- **Eligibility:** Specialized skills, salary minimums
+- **Benefit:** 30% of salary tax-free for 5 years
+- **Financial impact:** €5,000-€15,000+ additional take-home annually
+- **Application:** Within 4 months of starting work
+
+## 🔄 Return to US Market
+
+### International Experience Premium:
+- **15-25% higher starting salaries** for international experience
+- **Global perspective** highly valued by multinationals
+- **Dutch tech experience** commands premium in Silicon Valley
+- **European networks** increasingly valuable for US expansion
+
+### Strategic Advantages:
+- **EU market expertise** for business expansion roles
+- **Multilingual capabilities** and cultural competence
+- **Innovation experience** from leading Dutch tech ecosystem
+- **Sustainability leadership** from world's most progressive country
+
+## 📊 Career Planning Recommendations
+
+**Technology Track:** Leverage Dutch innovation → EU expansion → Silicon Valley premium
+**Consulting Track:** European headquarters → global mobility → leadership development  
+**Research Track:** EU funding access → international collaboration → policy influence
+**Entrepreneurship:** EU citizenship → global startup opportunities → innovative ecosystem access`,
+
+                'netherlands-student-visa-immigration-guide-2026.md': `# Student Visa & Immigration Guide 2026
+
+## 🛂 Residence Permit Overview
+
+**Important:** US students don't get "visas" - they receive **residence permits** for study and limited work.
+
+### Permit Types:
+- **Study Permit:** Programs longer than 90 days
+- **Combined residence/work permit:** Includes work authorization
+- **Duration:** Length of program plus 3-month buffer
+
+## 📋 Required Documentation
+
+### Financial Proof (Critical):
+- **Amount:** €1,130.77 per month (€13,569 annually for 2026)
+- **Acceptable proof:** Bank statements, scholarships, parental guarantees
+- **Timeline:** Must show funds throughout application process
+
+### Background Verification:
+- **FBI Background Check:** Required with apostille certification  
+- **Processing time:** 12-16 weeks total
+- **Cost:** ~$50-100 including apostille
+- **Validity:** Within 6 months of application
+
+### Health Requirements:
+- **Mandatory insurance:** €100-130/month Dutch coverage
+- **Government subsidy:** Available for students
+- **TB test:** Not typically required for US students
+- **COVID requirements:** As updated by Dutch health authorities
+
+## 💰 Fees & Costs
+
+### Government Fees (2026):
+- **Residence permit application:** €372
+- **Renewal fee:** €372 per extension
+- **Family permits:** €372 per family member
+
+### Processing Costs:
+- **FBI background check:** $18 + expedited fees
+- **Apostille certification:** $20-50 per document
+- **Document translation:** €25-75 if required
+
+## 👔 Work Authorization
+
+### Student Work Rights:
+- **Part-time:** 16 hours/week during studies
+- **Full-time:** Unlimited during official breaks
+- **Wage expectations:** €8-15/hour typical student jobs
+- **No employer sponsorship required**
+
+### Common Student Employment:
+- University positions (teaching, research)
+- Hospitality (restaurants, hotels)
+- Tutoring (especially English)
+- Retail and customer service
+
+## 📅 Application Timeline
+
+### 18 Months Before (Junior Year):
+- Begin financial planning and FBI background check
+- Research visa requirements thoroughly
+- Start scholarship applications
+
+### 12 Months Before (Senior Year):
+- Complete university applications
+- Obtain FBI background check and apostille
+- Build required bank account balances
+
+### 6 Months Before (Spring Senior Year):
+- Accept university offer
+- Begin university-sponsored permit application
+- Purchase Dutch health insurance
+
+### 3 Months Before (Summer):
+- Monitor processing status
+- Prepare for arrival and permit pickup
+- Finalize housing and travel
+
+## ⚠️ Common Rejection Reasons
+
+**Financial Insufficiency:**
+- Insufficient funds or unclear source documentation
+- **Prevention:** Maintain required balance throughout process
+
+**Document Problems:**
+- Missing apostille or improper authentication
+- **Prevention:** Use only official, verified documents
+
+**Academic Issues:**
+- Poor grades or program mismatch
+- **Prevention:** Strong GPA and relevant prerequisites
+
+## 🏛️ Path to Permanent Residence
+
+### 5-Year Continuous Residence:
+- **Student years count** toward requirement
+- **Academic success** and clean record required
+- **Financial stability** demonstrated
+- **Integration course** and basic Dutch language
+
+### Post-Graduation Transition:
+- **1-year search permit** automatic after graduation
+- **Skilled worker permit** with permanent employment
+- **EU Blue Card** for high-skilled positions (€56,000+ salary)
+
+## 📞 Important Contacts
+
+**Emergency Services:** 112 (police, fire, ambulance)
+**US Embassy The Hague:** +31-70-310-2209
+**Dutch Immigration (IND):** www.ind.nl
+**Student Support:** University international offices
+
+*Processing times and requirements subject to change. Always verify current information with official Dutch authorities and your university.*`
+            };
+            
+            return templates[filename] || `# ${filename.replace('.md', '').replace(/-/g, ' ')}\n\nThis document contains detailed information about Dutch higher education. In a full implementation, this content would be loaded from the actual markdown file.`;
+        }
+
+        // Initialize the file list
+        function initFileList() {
+            const fileList = document.getElementById('fileList');
+            files.forEach(file => {
+                const li = document.createElement('li');
+                li.innerHTML = `
+                    <a href="#" data-file="${file.name}" onclick="loadFile('${file.name}'); return false;">
+                        <strong>${file.title}</strong><br>
+                        <small style="color: #64748b;">${file.description}</small>
+                    </a>
+                `;
+                fileList.appendChild(li);
+            });
+            
+            // Load first file by default
+            loadFile(files[0].name);
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initFileList);
+    </script>
+</body>
+</html>
