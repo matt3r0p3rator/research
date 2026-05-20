@@ -41,10 +41,10 @@ Transform detailed research reports into highly condensed summaries that serve a
 - Ensure all internal links work correctly
 
 ## Output Requirements
-- Save as `research-output/<topic>-summary.md`
+- Save as `<topic>/<topic>-summary.md`
 - Keep total length under 1000 words
 - Include a clear link back to the full detailed report
-- Use relative path links to sections in the detailed report
+- Use relative path links to sections in the detailed report (both files are in the same topic folder)
 - Ensure the summary can stand alone as a quick reference
 
 ## Link Format

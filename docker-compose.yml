@@ -13,8 +13,19 @@ services:
       - ${TRILIUM_DATA_DIR:-~/trilium-data}:/home/node/trilium-data
       # Research folders mounted read-only for import
       - ./charts:/research/charts:ro
-      - ./chem:/research/chem:ro
       - ./cloud-chamber:/research/cloud-chamber:ro
       - ./crypto:/research/crypto:ro
+      - ./private-maritime:/research/private-maritime:ro
       - ./refrigeration:/research/refrigeration:ro
       - ./school-search:/research/school-search:ro
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    restart: unless-stopped
+    command: http trilium:8080
+    ports:
+      - '4041:4040'
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTH_TOKEN}
+

@@ -30,19 +30,19 @@ For every significant rabbit hole surfaced during exploration:
 ### Phase 4 — Compile
 Once all explorations are complete, delegate to the `research-compiler` subagent:
 - Pass all raw findings as structured input.
-- Instruct it to produce a final Markdown report at `research-output/<sanitized-topic>.md`.
+- Instruct it to produce a final Markdown report at `<sanitized-topic>/<sanitized-topic>.md` (a folder named after the topic, containing the report).
 
 ### Phase 5 — Condense
 After the full report is compiled, delegate to the `research-condenser` subagent:
 - Pass the path to the compiled report.
 - Instruct it to create a concise summary with navigational links to detailed sections.
-- The condensed version should be saved as `research-output/<sanitized-topic>-summary.md`.
+- The condensed version should be saved as `<sanitized-topic>/<sanitized-topic>-summary.md`.
 
 ### Phase 6 — Browser Compile (Optional)
 For web viewing and sharing, delegate to the `research-browser-compiler` subagent:
 - Pass the paths to all generated research files.
 - Instruct it to create browser-friendly compiled versions with proper navigation.
-- The browser version should be saved as `research-output/<sanitized-topic>-browser.html`.
+- The browser version should be saved as `<sanitized-topic>/<sanitized-topic>-browser.html`.
 
 ### Phase 7 — Review
 Read the compiled report. If glaring gaps remain, dispatch targeted explorer subagents to fill them, then request a revision from the compiler.
