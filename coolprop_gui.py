@@ -31,7 +31,7 @@ except ImportError:
 
 # ── Theme ─────────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("dark")
-ctk.set_default_color_theme("blue")
+ctk.set_default_color_theme("dark-blue")
 
 # ── Fluid lists ───────────────────────────────────────────────────────────────
 _COMMON = [
@@ -77,6 +77,16 @@ OVARS = [
     ("A", "Speed of Sound",     lambda v: f"{v:.4f} m/s"),
     ("L", "Thermal Cond.",      lambda v: f"{v:.6f} W/m·K"),
     ("V", "Dyn. Viscosity",     lambda v: f"{v:.4e} Pa·s"),
+]
+
+SAT_TABLE_COLUMNS = [
+    "T (°C)",
+    "P_sat (kPa)",
+    "ρ_liq (kg/m³)",
+    "ρ_vap (kg/m³)",
+    "h_liq (kJ/kg)",
+    "h_vap (kJ/kg)",
+    "ΔH_vap (kJ/kg)",
 ]
 
 # ── Variable descriptions ─────────────────────────────────────────────────────
@@ -218,11 +228,11 @@ class Tooltip:
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
         tw.wm_attributes("-topmost", True)
-        frame = tk.Frame(tw, background="#1c1c2e", relief="flat",
-                         highlightbackground="#555577", highlightthickness=1)
+        frame = tk.Frame(tw, background="#252526", relief="flat",
+                         highlightbackground="#3c3c3c", highlightthickness=1)
         frame.pack(ipadx=6, ipady=4)
-        tk.Label(frame, text=self._text, background="#1c1c2e",
-                 foreground="#ccccff", font=("Segoe UI", 9),
+        tk.Label(frame, text=self._text, background="#252526",
+                 foreground="#cccccc", font=("Segoe UI", 9),
                  wraplength=340, justify="left").pack()
 
     def _hide(self, event=None):
@@ -271,21 +281,67 @@ def _init_style():
         foreground=[("selected", "white")])
 
 
+def _scroll_units(event):
+    """Normalize wheel events across Linux, Windows, and macOS."""
+    num = getattr(event, "num", None)
+    if num == 4:
+        return -1
+    if num == 5:
+        return 1
+    delta = getattr(event, "delta", 0)
+    if delta == 0:
+        return 0
+    steps = max(1, int(abs(delta) / 120))
+    return -steps if delta > 0 else steps
+
+
+def _bind_wheel_scroll(widget, y_scroll=None, x_scroll=None):
+    def _on_y(event):
+        units = _scroll_units(event)
+        if y_scroll is not None and units:
+            y_scroll(units)
+            return "break"
+        return None
+
+    def _on_x(event):
+        units = _scroll_units(event)
+        if x_scroll is not None and units:
+            x_scroll(units)
+            return "break"
+        return None
+
+    for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+        widget.bind(seq, _on_y, add="+")
+    for seq in ("<Shift-MouseWheel>", "<Shift-Button-4>", "<Shift-Button-5>"):
+        widget.bind(seq, _on_x if x_scroll is not None else _on_y, add="+")
+
+
 def make_tree(parent, cols, widths, height=10):
     """Return (outer_frame, treeview)."""
     _init_style()
     outer = tk.Frame(parent, bg="#1e2128")
+    outer.grid_columnconfigure(0, weight=1)
+    outer.grid_rowconfigure(0, weight=1)
     tv = ttk.Treeview(outer, columns=cols, show="headings",
                       style="CT.Treeview", height=height)
     for col, w in zip(cols, widths):
         tv.heading(col, text=col)
         tv.column(col, width=w, anchor="w", stretch=True)
-    sb = ttk.Scrollbar(outer, orient="vertical", command=tv.yview)
-    tv.configure(yscrollcommand=sb.set)
+    sb_y = ttk.Scrollbar(outer, orient="vertical", command=tv.yview)
+    sb_x = ttk.Scrollbar(outer, orient="horizontal", command=tv.xview)
+    tv.configure(yscrollcommand=sb_y.set, xscrollcommand=sb_x.set)
     tv.tag_configure("e", background="#1e2128")
     tv.tag_configure("o", background="#262c3a")
-    tv.pack(side="left", fill="both", expand=True)
-    sb.pack(side="right", fill="y")
+
+    _bind_wheel_scroll(
+        tv,
+        y_scroll=lambda units: tv.yview_scroll(units, "units"),
+        x_scroll=lambda units: tv.xview_scroll(units, "units"),
+    )
+
+    tv.grid(row=0, column=0, sticky="nsew")
+    sb_y.grid(row=0, column=1, sticky="ns")
+    sb_x.grid(row=1, column=0, sticky="ew")
     return outer, tv
 
 
@@ -464,6 +520,15 @@ def _section(parent, text):
     ctk.CTkLabel(parent, text=text, font=F_SECTION).pack(anchor="w", pady=(10, 4))
 
 
+def _page_hint(parent, text: str):
+    """Muted info line describing what a page does and how to use it."""
+    ctk.CTkLabel(
+        parent, text=text, font=F_SMALL,
+        text_color="#7a8a9a", wraplength=920,
+        justify="left", anchor="w",
+    ).pack(anchor="w", fill="x", pady=(0, 14))
+
+
 def _fluid_row(parent, default="R134a"):
     row = ctk.CTkFrame(parent, fg_color="transparent")
     row.pack(fill="x", pady=(0, 10))
@@ -476,20 +541,69 @@ def _fluid_row(parent, default="R134a"):
 
 def _calc_btn(parent, cmd):
     ctk.CTkButton(parent, text="  Calculate  ", font=F_CALC,
-                  height=44, command=cmd).pack(pady=12)
+                  height=44, command=cmd,
+                  fg_color="#1e5a8a", hover_color="#174d79").pack(pady=12)
+
+
+def _copy_tree_to_clipboard(owner, tree):
+    cols = list(tree["columns"])
+    lines = ["\t".join(cols)]
+    for item in tree.get_children():
+        values = [str(v) for v in tree.item(item, "values")]
+        lines.append("\t".join(values))
+    root = owner.winfo_toplevel()
+    root.clipboard_clear()
+    root.clipboard_append("\n".join(lines))
+    root.update_idletasks()
+
+
+def _phase_display_name(phase_name):
+    if not phase_name:
+        return "Unknown"
+    return phase_name.replace("_", " ").title()
+
+
+class AppScrollablePage(ctk.CTkScrollableFrame):
+    def __init__(self, master, **kwargs):
+        kwargs.setdefault("fg_color", "transparent")
+        super().__init__(master, **kwargs)
+        self.after_idle(self._install_scroll_forwarding)
+
+    def _install_scroll_forwarding(self):
+        canvas = getattr(self, "_parent_canvas", None)
+        if canvas is None:
+            return
+
+        def _page_scroll(units):
+            canvas.yview_scroll(units, "units")
+
+        self._bind_descendant_scroll(self, _page_scroll)
+
+    def _bind_descendant_scroll(self, widget, y_scroll):
+        if isinstance(widget, ttk.Treeview):
+            return
+        _bind_wheel_scroll(widget, y_scroll=y_scroll)
+        for child in widget.winfo_children():
+            self._bind_descendant_scroll(child, y_scroll)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 1: State Point  (free input/output variable selection)
 # ─────────────────────────────────────────────────────────────────────────────
-class StatePointPage(ctk.CTkScrollableFrame):
+class StatePointPage(AppScrollablePage):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
         self._build()
 
     def _build(self):
         ctk.CTkLabel(self, text="State Point Calculator", font=F_TITLE).pack(
-            anchor="w", pady=(0, 14))
+            anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Enter any two independent properties (e.g. T + P for superheated state, "
+            "or T + Q for a point on the saturation curve). "
+            "Select the variable type, enter a value and choose its unit for each input, "
+            "tick the outputs you want, then press Calculate. "
+            "Hover any output checkbox for a physical definition of that property.")
 
         # ── Fluid ──
         fl_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -678,14 +792,21 @@ class StatePointPage(ctk.CTkScrollableFrame):
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 2: Saturation Properties
 # ─────────────────────────────────────────────────────────────────────────────
-class SaturationPage(ctk.CTkScrollableFrame):
+class SaturationPage(AppScrollablePage):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
         self._build()
 
     def _build(self):
         ctk.CTkLabel(self, text="Saturation Properties", font=F_TITLE).pack(
-            anchor="w", pady=(0, 14))
+            anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Look up properties at the liquid–vapor boundary. "
+            "Use the radio buttons to fix either Temperature or Pressure, "
+            "enter the value and unit, then press Calculate. "
+            "Results show saturated-liquid (Q = 0, bubble point) and "
+            "saturated-vapor (Q = 1, dew point) side by side. "
+            "Q must be between 0 and 1; values above the critical point are not valid.")
 
         inp = ctk.CTkFrame(self, corner_radius=10)
         inp.pack(fill="x", pady=(0, 12))
@@ -826,14 +947,21 @@ class SaturationPage(ctk.CTkScrollableFrame):
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 3: Refrigeration Cycle
 # ─────────────────────────────────────────────────────────────────────────────
-class CyclePage(ctk.CTkScrollableFrame):
+class CyclePage(AppScrollablePage):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
         self._build()
 
     def _build(self):
         ctk.CTkLabel(self, text="Vapor-Compression Refrigeration Cycle",
-                     font=F_TITLE).pack(anchor="w", pady=(0, 14))
+                     font=F_TITLE).pack(anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Models a single-stage vapor-compression cycle (1 = comp. inlet, "
+            "2 = comp. exit, 3 = cond. exit, 4 = exp. valve exit). "
+            "Enter the saturation temperatures at evaporator and condenser, "
+            "superheat at the compressor inlet (K above sat. vapor), "
+            "subcooling at condenser exit (K below sat. liquid), and isentropic efficiency. "
+            "Hover any label for its engineering definition.")
 
         inp = ctk.CTkFrame(self, corner_radius=10)
         inp.pack(fill="x", pady=(0, 12))
@@ -1021,7 +1149,7 @@ class CyclePage(ctk.CTkScrollableFrame):
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 4: System Power & Flow Sizing
 # ─────────────────────────────────────────────────────────────────────────────
-class SizingPage(ctk.CTkScrollableFrame):
+class SizingPage(AppScrollablePage):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
         self._last_Qcool = None
@@ -1030,7 +1158,13 @@ class SizingPage(ctk.CTkScrollableFrame):
 
     def _build(self):
         ctk.CTkLabel(self, text="System Power & Flow Sizing",
-                     font=F_TITLE).pack(anchor="w", pady=(0, 14))
+                     font=F_TITLE).pack(anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Converts cycle performance into physical equipment sizing. "
+            "Enter a target cooling capacity (kW) and the same cycle parameters as the Refrig. Cycle page. "
+            "Press Calculate to get mass flow rate, compressor shaft and electrical power, and COP. "
+            "Then fill in the secondary-loop fields (chilled-water ΔT, system head, pump efficiency) "
+            "and press Calculate Secondary Loop to size the pump and find total system electrical draw.")
 
         inp = ctk.CTkFrame(self, corner_radius=10)
         inp.pack(fill="x", pady=(0, 12))
@@ -1277,19 +1411,20 @@ class SizingPage(ctk.CTkScrollableFrame):
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 5: Capillary Tube Sizing
 # ─────────────────────────────────────────────────────────────────────────────
-class CapTubePage(ctk.CTkScrollableFrame):
+class CapTubePage(AppScrollablePage):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
         self._build()
 
     def _build(self):
         ctk.CTkLabel(self, text="Capillary Tube Sizing", font=F_TITLE).pack(
-            anchor="w", pady=(0, 4))
-        ctk.CTkLabel(
-            self,
-            text="Adiabatic, homogeneous equilibrium model, isenthalpic flow"
-                 "  —  Churchill (1977) friction factor",
-            font=F_SMALL, text_color="gray55").pack(anchor="w", pady=(0, 12))
+            anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Adiabatic, homogeneous-equilibrium model (isenthalpic flow, Churchill 1977 friction factor). "
+            "Mode \"Find tube length\" returns the required length for a given inner diameter — "
+            "use this when the tube diameter is already chosen or stocked. "
+            "Mode \"Diameter scan\" sweeps 0.5 – 3.1 mm in 0.1 mm steps to find the diameter "
+            "closest to a target length. \u26a0 means the flow is choked; enlarge the tube or reduce mass flow.")
 
         # ── Conditions card ──
         inp = ctk.CTkFrame(self, corner_radius=10)
@@ -1518,14 +1653,24 @@ class CapTubePage(ctk.CTkScrollableFrame):
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 6: Fluid Reference Data
 # ─────────────────────────────────────────────────────────────────────────────
-class FluidInfoPage(ctk.CTkScrollableFrame):
+class FluidInfoPage(AppScrollablePage):
     def __init__(self, master):
         super().__init__(master, fg_color="transparent")
+        self._sat_table_data = {col: [] for col in SAT_TABLE_COLUMNS}
+        self._last_fluid = None
         self._build()
 
     def _build(self):
         ctk.CTkLabel(self, text="Fluid Reference Data", font=F_TITLE).pack(
-            anchor="w", pady=(0, 14))
+            anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Browse critical-point constants, triple-point data, normal boiling point, "
+            "and a 30-row saturation table for any fluid in CoolProp's library. "
+            "Select a fluid from the dropdown and press Show. "
+            "Scroll right in the saturation table to see enthalpy, density, and latent-heat columns. "
+            "Use the graph controls under the table to plot any two columns against each other. "
+            "The four charts below trace vapour pressure, density, enthalpy, and thermal conductivity "
+            "across the full saturation range.")
 
         row = ctk.CTkFrame(self, fg_color="transparent")
         row.pack(fill="x", pady=(0, 12))
@@ -1547,10 +1692,46 @@ class FluidInfoPage(ctk.CTkScrollableFrame):
             anchor="w", pady=(0, 4))
         tf2, self._tv_sat = make_tree(
             self,
-            ["T (°C)", "P_sat (kPa)", "ρ_liq (kg/m³)", "ρ_vap (kg/m³)",
-             "h_liq (kJ/kg)", "h_vap (kJ/kg)", "ΔH_vap (kJ/kg)"],
+            SAT_TABLE_COLUMNS,
             [70, 110, 120, 120, 120, 120, 120], height=22)
         tf2.pack(fill="both", expand=True)
+
+        plot_ctl = ctk.CTkFrame(self, corner_radius=10)
+        plot_ctl.pack(fill="x", pady=(12, 14))
+        ctk.CTkLabel(plot_ctl, text="Graph Saturation Table", font=F_SECTION).grid(
+            row=0, column=0, columnspan=7, sticky="w", padx=14, pady=(12, 4))
+        ctk.CTkLabel(
+            plot_ctl,
+            text="Choose any X and Y columns from the table above, then plot the sampled saturation data.",
+            font=F_SMALL, text_color="#7a8a9a").grid(
+            row=1, column=0, columnspan=7, sticky="w", padx=14, pady=(0, 10))
+
+        ctk.CTkLabel(plot_ctl, text="X axis:", font=F_BODY).grid(
+            row=2, column=0, padx=(14, 4), pady=(0, 12), sticky="w")
+        self._sat_x = tk.StringVar(value=SAT_TABLE_COLUMNS[0])
+        ctk.CTkComboBox(
+            plot_ctl, values=SAT_TABLE_COLUMNS, variable=self._sat_x,
+            width=170, font=F_BODY, state="readonly").grid(
+            row=2, column=1, padx=(0, 12), pady=(0, 12), sticky="w")
+
+        ctk.CTkLabel(plot_ctl, text="Y axis:", font=F_BODY).grid(
+            row=2, column=2, padx=(0, 4), pady=(0, 12), sticky="w")
+        self._sat_y = tk.StringVar(value=SAT_TABLE_COLUMNS[1])
+        ctk.CTkComboBox(
+            plot_ctl, values=SAT_TABLE_COLUMNS, variable=self._sat_y,
+            width=170, font=F_BODY, state="readonly").grid(
+            row=2, column=3, padx=(0, 12), pady=(0, 12), sticky="w")
+
+        ctk.CTkButton(
+            plot_ctl, text="Plot Table", height=34, font=F_BODY,
+            fg_color="#1e5a8a", hover_color="#174d79",
+            command=self._plot_sat_table).grid(
+            row=2, column=4, padx=(0, 8), pady=(0, 12), sticky="w")
+        ctk.CTkButton(
+            plot_ctl, text="Reset Charts", height=34, font=F_BODY,
+            fg_color="gray25", hover_color="gray20",
+            command=self._plot_reference_charts).grid(
+            row=2, column=5, padx=(0, 14), pady=(0, 12), sticky="w")
 
         # ── Property Charts ──
         ctk.CTkLabel(self, text="Property Charts", font=F_SECTION).pack(
@@ -1584,6 +1765,7 @@ class FluidInfoPage(ctk.CTkScrollableFrame):
         T_min = max(Tt + 1.0, 180.0)
         T_max = Tc - 0.5
         sat_rows = []
+        sat_data = {col: [] for col in SAT_TABLE_COLUMNS}
         for T in np.linspace(T_min, T_max, 30):
             try:
                 P   = PropsSI("P", "T", T, "Q", 0, fluid)
@@ -1591,18 +1773,64 @@ class FluidInfoPage(ctk.CTkScrollableFrame):
                 rv  = PropsSI("D", "T", T, "Q", 1, fluid)
                 hl  = PropsSI("H", "T", T, "Q", 0, fluid)
                 hv  = PropsSI("H", "T", T, "Q", 1, fluid)
+                row_vals = (
+                    T - 273.15,
+                    P / 1000,
+                    rl,
+                    rv,
+                    hl / 1000,
+                    hv / 1000,
+                    (hv - hl) / 1000,
+                )
                 sat_rows.append((
-                    f"{T - 273.15:.2f}",
-                    f"{P/1000:.3f}",
-                    f"{rl:.3f}",
-                    f"{rv:.5f}",
-                    f"{hl/1000:.3f}",
-                    f"{hv/1000:.3f}",
-                    f"{(hv - hl)/1000:.3f}",
+                    f"{row_vals[0]:.2f}",
+                    f"{row_vals[1]:.3f}",
+                    f"{row_vals[2]:.3f}",
+                    f"{row_vals[3]:.5f}",
+                    f"{row_vals[4]:.3f}",
+                    f"{row_vals[5]:.3f}",
+                    f"{row_vals[6]:.3f}",
                 ))
+                for col, value in zip(SAT_TABLE_COLUMNS, row_vals):
+                    sat_data[col].append(value)
             except Exception:
                 pass
+        self._sat_table_data = sat_data
+        self._last_fluid = fluid
         fill_tree(self._tv_sat, sat_rows)
+        self._plot_reference_charts()
+
+    def _plot_sat_table(self):
+        if not MPLOK:
+            return
+        if not any(self._sat_table_data.values()):
+            messagebox.showinfo("Info", "Press Show to build the saturation table first")
+            return
+
+        x_key = self._sat_x.get()
+        y_key = self._sat_y.get()
+        x_vals = self._sat_table_data.get(x_key, [])
+        y_vals = self._sat_table_data.get(y_key, [])
+        if not x_vals or not y_vals:
+            messagebox.showinfo("Info", "No saturation data available for the selected plot")
+            return
+
+        self._chart.clear()
+        fig = self._chart.figure()
+        ax = fig.add_subplot(111)
+        _style_ax(ax)
+        ax.plot(x_vals, y_vals, color=_C["cycle"], lw=2.2, marker="o", ms=4)
+        ax.scatter([x_vals[0], x_vals[-1]], [y_vals[0], y_vals[-1]],
+                   color=_C["pt"], s=42, zorder=5)
+        ax.set_xlabel(x_key)
+        ax.set_ylabel(y_key)
+        fluid = self._last_fluid or self._fluid.get()
+        ax.set_title(f"{fluid}  —  Saturation Table Plot")
+        fig.tight_layout()
+        self._chart.redraw()
+
+    def _plot_reference_charts(self):
+        fluid = self._last_fluid or self._fluid.get()
         self._plot(fluid)
 
     def _plot(self, fluid):
@@ -1657,7 +1885,7 @@ class FluidInfoPage(ctk.CTkScrollableFrame):
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE 7: Custom Property Chart
 # ─────────────────────────────────────────────────────────────────────────────
-class ChartPage(ctk.CTkScrollableFrame):
+class ChartPage(AppScrollablePage):
     """Interactive chart: sweep any CoolProp property over T or P."""
 
     _Y_CHOICES = [
@@ -1678,7 +1906,13 @@ class ChartPage(ctk.CTkScrollableFrame):
 
     def _build(self):
         ctk.CTkLabel(self, text="Custom Property Chart",
-                     font=F_TITLE).pack(anchor="w", pady=(0, 14))
+                     font=F_TITLE).pack(anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Plot any combination of thermodynamic properties against temperature or pressure. "
+            "Choose a fluid, set X axis (T in °C or P in kPa) and its range, "
+            "pick the phase (sat-liq = Q 0 curve, sat-vap = Q 1 curve, "
+            "superheated/subcooled = 10 K / 10% offset from saturation), "
+            "tick the Y properties you want (each gets its own sub-plot), then press Plot.")
 
         # ── Controls row ──────────────────────────────────────────────────────
         ctrl = ctk.CTkFrame(self, fg_color="transparent")
@@ -1846,21 +2080,410 @@ class ChartPage(ctk.CTkScrollableFrame):
         self._chart.redraw()
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# PAGE 8: Quick Tools
+# ─────────────────────────────────────────────────────────────────────────────
+class QuickToolsPage(AppScrollablePage):
+    def __init__(self, master):
+        super().__init__(master, fg_color="transparent")
+        self._build()
+
+    def _build(self):
+        ctk.CTkLabel(self, text="Engineering Quick Tools", font=F_TITLE).pack(
+            anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "Adds fast utilities around the main thermodynamic pages. "
+            "Use Unit Converter to translate between engineering units, "
+            "Carnot Benchmark to compare a cycle against the reversible limit, "
+            "and State Classifier to identify the phase region from T + P.")
+
+        self._build_converter()
+        self._build_carnot()
+        self._build_classifier()
+
+    def _build_converter(self):
+        card = ctk.CTkFrame(self, corner_radius=10)
+        card.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(card, text="Unit Converter", font=F_SECTION).grid(
+            row=0, column=0, columnspan=6, sticky="w", padx=14, pady=(12, 6))
+
+        self._conv_key = tk.StringVar(value="P")
+        self._conv_unit = tk.StringVar(value="kPa")
+
+        ctk.CTkLabel(card, text="Variable:", font=F_BODY).grid(
+            row=1, column=0, padx=(14, 4), pady=6, sticky="w")
+        ctk.CTkComboBox(
+            card,
+            values=["T", "P", "H", "S", "D", "U"],
+            variable=self._conv_key,
+            width=110,
+            font=F_BODY,
+            command=self._refresh_converter_units,
+        ).grid(row=1, column=1, padx=(0, 10), pady=6, sticky="w")
+
+        ctk.CTkLabel(card, text="Value:", font=F_BODY).grid(
+            row=1, column=2, padx=(0, 4), pady=6, sticky="w")
+        self._conv_value = ctk.CTkEntry(card, width=120, font=F_BODY)
+        self._conv_value.insert(0, "101.325")
+        self._conv_value.grid(row=1, column=3, padx=(0, 10), pady=6, sticky="w")
+
+        ctk.CTkLabel(card, text="Input unit:", font=F_BODY).grid(
+            row=1, column=4, padx=(0, 4), pady=6, sticky="w")
+        self._conv_unit_cb = ctk.CTkComboBox(
+            card,
+            variable=self._conv_unit,
+            width=100,
+            font=F_BODY,
+            state="readonly",
+        )
+        self._conv_unit_cb.grid(row=1, column=5, padx=(0, 14), pady=6, sticky="w")
+
+        ctk.CTkButton(
+            card,
+            text="Convert",
+            height=34,
+            font=F_BODY,
+            command=self._convert_units,
+        ).grid(row=2, column=0, padx=14, pady=(0, 10), sticky="w")
+
+        ctk.CTkButton(
+            card,
+            text="Copy Table",
+            height=34,
+            font=F_BODY,
+            fg_color="gray25",
+            hover_color="gray20",
+            command=lambda: _copy_tree_to_clipboard(self, self._tv_conv),
+        ).grid(row=2, column=1, padx=(0, 14), pady=(0, 10), sticky="w")
+
+        tf, self._tv_conv = make_tree(card, ["Unit", "Value"], [150, 260], height=6)
+        tf.grid(row=3, column=0, columnspan=6, padx=14, pady=(0, 14), sticky="nsew")
+        self._refresh_converter_units(self._conv_key.get())
+        self._convert_units()
+
+    def _build_carnot(self):
+        card = ctk.CTkFrame(self, corner_radius=10)
+        card.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(card, text="Carnot Benchmark", font=F_SECTION).grid(
+            row=0, column=0, columnspan=7, sticky="w", padx=14, pady=(12, 6))
+        ctk.CTkLabel(
+            card,
+            text="Use evaporator and condenser temperatures to estimate the reversible COP limit.",
+            font=F_SMALL,
+            text_color="#7a8a9a",
+        ).grid(row=1, column=0, columnspan=7, sticky="w", padx=14, pady=(0, 10))
+
+        fields = [
+            ("Cold side [°C]", "-10"),
+            ("Hot side [°C]", "40"),
+            ("Actual COP (optional)", "2.8"),
+        ]
+        self._carnot_entries = []
+        for idx, (label, default) in enumerate(fields):
+            ctk.CTkLabel(card, text=label, font=F_BODY).grid(
+                row=2, column=idx * 2, padx=(14, 4), pady=6, sticky="w")
+            ent = ctk.CTkEntry(card, width=110, font=F_BODY)
+            ent.insert(0, default)
+            ent.grid(row=2, column=idx * 2 + 1, padx=(0, 14), pady=6, sticky="w")
+            self._carnot_entries.append(ent)
+
+        ctk.CTkButton(
+            card,
+            text="Calculate Benchmark",
+            height=34,
+            font=F_BODY,
+            command=self._calc_carnot,
+        ).grid(row=3, column=0, padx=14, pady=(0, 10), sticky="w")
+
+        tf, self._tv_carnot = make_tree(card, ["Metric", "Value"], [210, 240], height=6)
+        tf.grid(row=4, column=0, columnspan=7, padx=14, pady=(0, 14), sticky="nsew")
+        self._calc_carnot()
+
+    def _build_classifier(self):
+        card = ctk.CTkFrame(self, corner_radius=10)
+        card.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(card, text="State Classifier", font=F_SECTION).grid(
+            row=0, column=0, columnspan=8, sticky="w", padx=14, pady=(12, 6))
+
+        ctk.CTkLabel(card, text="Fluid:", font=F_BODY).grid(
+            row=1, column=0, padx=(14, 4), pady=6, sticky="w")
+        self._phase_fluid = tk.StringVar(value="R134a")
+        ctk.CTkComboBox(
+            card,
+            values=ALL_FLUIDS,
+            variable=self._phase_fluid,
+            width=180,
+            font=F_BODY,
+        ).grid(row=1, column=1, padx=(0, 10), pady=6, sticky="w")
+
+        ctk.CTkLabel(card, text="T [°C]:", font=F_BODY).grid(
+            row=1, column=2, padx=(0, 4), pady=6, sticky="w")
+        self._phase_T = ctk.CTkEntry(card, width=110, font=F_BODY)
+        self._phase_T.insert(0, "25")
+        self._phase_T.grid(row=1, column=3, padx=(0, 10), pady=6, sticky="w")
+
+        ctk.CTkLabel(card, text="P [kPa]:", font=F_BODY).grid(
+            row=1, column=4, padx=(0, 4), pady=6, sticky="w")
+        self._phase_P = ctk.CTkEntry(card, width=110, font=F_BODY)
+        self._phase_P.insert(0, "770")
+        self._phase_P.grid(row=1, column=5, padx=(0, 10), pady=6, sticky="w")
+
+        ctk.CTkButton(
+            card,
+            text="Classify State",
+            height=34,
+            font=F_BODY,
+            command=self._classify_state,
+        ).grid(row=1, column=6, padx=(0, 14), pady=6, sticky="w")
+
+        ctk.CTkButton(
+            card,
+            text="Copy Table",
+            height=34,
+            font=F_BODY,
+            fg_color="gray25",
+            hover_color="gray20",
+            command=lambda: _copy_tree_to_clipboard(self, self._tv_phase),
+        ).grid(row=1, column=7, padx=(0, 14), pady=6, sticky="w")
+
+        tf, self._tv_phase = make_tree(card, ["Property", "Value"], [220, 320], height=8)
+        tf.grid(row=2, column=0, columnspan=8, padx=14, pady=(0, 14), sticky="nsew")
+        self._classify_state()
+
+    def _refresh_converter_units(self, key):
+        units = [unit for unit, _ in IVARS[key][2]]
+        self._conv_unit_cb.configure(values=units)
+        self._conv_unit.set(units[1] if len(units) > 1 else units[0])
+        defaults = {
+            "T": "25",
+            "P": "101.325",
+            "H": "250",
+            "S": "1.2",
+            "D": "1.2",
+            "U": "220",
+        }
+        self._conv_value.delete(0, "end")
+        self._conv_value.insert(0, defaults.get(key, "1"))
+
+    def _convert_units(self):
+        key = self._conv_key.get()
+        try:
+            raw = float(self._conv_value.get())
+            to_si = {unit: fn for unit, fn in IVARS[key][2]}[self._conv_unit.get()]
+        except (ValueError, KeyError):
+            messagebox.showerror("Error", "Enter a valid value and unit")
+            return
+
+        si_value = to_si(raw)
+        rows = []
+        if key == "T":
+            rows = [
+                ("K", f"{si_value:.5f}"),
+                ("°C", f"{si_value - 273.15:.5f}"),
+                ("°F", f"{(si_value - 273.15) * 9 / 5 + 32:.5f}"),
+            ]
+        elif key == "P":
+            rows = [
+                ("Pa", f"{si_value:.3f}"),
+                ("kPa", f"{si_value / 1e3:.6f}"),
+                ("MPa", f"{si_value / 1e6:.6f}"),
+                ("bar", f"{si_value / 1e5:.6f}"),
+                ("psi", f"{si_value / 6894.76:.6f}"),
+            ]
+        elif key in {"H", "U"}:
+            rows = [
+                ("J/kg", f"{si_value:.5f}"),
+                ("kJ/kg", f"{si_value / 1e3:.8f}"),
+            ]
+        elif key == "S":
+            rows = [
+                ("J/kg·K", f"{si_value:.6f}"),
+                ("kJ/kg·K", f"{si_value / 1e3:.9f}"),
+            ]
+        elif key == "D":
+            rows = [
+                ("kg/m³", f"{si_value:.8f}"),
+                ("g/L", f"{si_value:.8f}"),
+            ]
+        fill_tree(self._tv_conv, rows)
+
+    def _calc_carnot(self):
+        try:
+            cold_c = float(self._carnot_entries[0].get())
+            hot_c = float(self._carnot_entries[1].get())
+        except ValueError:
+            messagebox.showerror("Error", "Cold and hot temperatures must be numeric")
+            return
+
+        cold_k = cold_c + 273.15
+        hot_k = hot_c + 273.15
+        if cold_k <= 0 or hot_k <= cold_k:
+            messagebox.showerror("Error", "Hot side must be above cold side and both must be above absolute zero")
+            return
+
+        cop_cooling = cold_k / (hot_k - cold_k)
+        cop_heating = hot_k / (hot_k - cold_k)
+        rows = [
+            ("Temperature lift", f"{hot_c - cold_c:.3f} K"),
+            ("Carnot COP (cooling)", f"{cop_cooling:.5f}"),
+            ("Carnot COP (heating)", f"{cop_heating:.5f}"),
+            ("Ideal work per unit cooling", f"{1 / cop_cooling:.5f} kW/kW"),
+        ]
+
+        actual_raw = self._carnot_entries[2].get().strip()
+        if actual_raw:
+            try:
+                actual_cop = float(actual_raw)
+                if actual_cop > 0:
+                    rows.append(("Second-law efficiency", f"{actual_cop / cop_cooling:.5f}"))
+                    rows.append(("Carnot gap", f"{(1 - actual_cop / cop_cooling) * 100:.2f} %"))
+            except ValueError:
+                pass
+        fill_tree(self._tv_carnot, rows)
+
+    def _classify_state(self):
+        fluid = self._phase_fluid.get()
+        try:
+            T_si = float(self._phase_T.get()) + 273.15
+            P_si = float(self._phase_P.get()) * 1e3
+        except ValueError:
+            messagebox.showerror("Error", "Temperature and pressure must be numeric")
+            return
+
+        try:
+            phase_name = _phase_display_name(CP.PhaseSI("T", T_si, "P", P_si, fluid))
+        except Exception:
+            phase_name = "Unavailable"
+
+        rows = [("Phase region", phase_name)]
+        for key, label, fmt in [
+            ("D", "Density", OVARS[2][2]),
+            ("H", "Enthalpy", OVARS[3][2]),
+            ("S", "Entropy", OVARS[4][2]),
+            ("C", "Cp", OVARS[6][2]),
+            ("A", "Speed of Sound", OVARS[9][2]),
+            ("L", "Thermal Conductivity", OVARS[10][2]),
+            ("V", "Dynamic Viscosity", OVARS[11][2]),
+        ]:
+            try:
+                value = PropsSI(key, "T", T_si, "P", P_si, fluid)
+                rows.append((label, fmt(value)))
+            except Exception:
+                rows.append((label, "—"))
+
+        try:
+            quality = PropsSI("Q", "T", T_si, "P", P_si, fluid)
+            q_text = f"{quality:.6f}" if 0 <= quality <= 1 else "—"
+        except Exception:
+            q_text = "—"
+        rows.append(("Vapor quality", q_text))
+
+        try:
+            Tc = PropsSI("Tcrit", fluid)
+            Pc = PropsSI("Pcrit", fluid)
+            rows.append(("Reduced temperature", f"{T_si / Tc:.6f}"))
+            rows.append(("Reduced pressure", f"{P_si / Pc:.6f}"))
+        except Exception:
+            pass
+
+        fill_tree(self._tv_phase, rows)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PAGE 9: How To
+# ─────────────────────────────────────────────────────────────────────────────
+class HowToPage(AppScrollablePage):
+    def __init__(self, master):
+        super().__init__(master, fg_color="transparent")
+        self._build()
+
+    def _build(self):
+        ctk.CTkLabel(self, text="How To Use This App", font=F_TITLE).pack(
+            anchor="w", pady=(0, 6))
+        _page_hint(self,
+            "This page is the operator guide for the calculator. "
+            "It explains which page to use, which inputs are physically valid, "
+            "and a practical workflow for moving from a quick state lookup to cycle sizing.")
+
+        self._add_section(
+            "Recommended Workflow",
+            "1. Start with State Point when you know any two independent properties.\n"
+            "2. Use Saturation to inspect bubble-point and dew-point limits before building a cycle.\n"
+            "3. Move to Refrig. Cycle to compute state points 1-4 and COP.\n"
+            "4. Use System Sizing after the thermodynamic cycle is stable to size mass flow, compressor power, and pump load.\n"
+            "5. Finish with Capillary Tube or Property Charts for component design and sensitivity checks."
+        )
+
+        self._add_section(
+            "Choosing Inputs",
+            "State Point requires two independent properties. Good pairs include T + P, T + Q, P + Q, P + H, and P + S.\n"
+            "Do not enter the same variable twice. Quality Q is only valid inside the two-phase region and must remain between 0 and 1.\n"
+            "When working near the critical point, saturation pages and quality-based calculations can fail because liquid and vapor merge into one phase."
+        )
+
+        self._add_section(
+            "Cycle Modeling Tips",
+            "Evaporator and condenser inputs are saturation temperatures, not line temperatures.\n"
+            "Superheat is added at the compressor inlet to protect the compressor from liquid carryover.\n"
+            "Subcooling is removed from the condenser exit to reduce flash gas and increase refrigeration effect.\n"
+            "If refrigeration effect becomes negative or COP looks unreasonable, the first checks should be temperature lift, isentropic efficiency, and whether subcooling exceeds the available condensing margin."
+        )
+
+        self._add_section(
+            "Quick Tools",
+            "Unit Converter translates engineering units without leaving the app.\n"
+            "Carnot Benchmark estimates the reversible COP limit for a given hot and cold side temperature pair, which is useful for checking whether an actual COP is plausible.\n"
+            "State Classifier uses T + P to report the phase region and key transport properties for a quick sanity check before detailed calculations."
+        )
+
+        self._add_section(
+            "Charts And Reference Data",
+            "Fluid Reference shows critical properties, triple-point data, and a sampled saturation table.\n"
+            "Property Charts sweep a selected property over temperature or pressure to reveal trends.\n"
+            "Use the P-H diagrams on State Point and Refrig. Cycle pages to confirm whether a point lies inside the dome, in the superheated region, or in the subcooled-liquid region."
+        )
+
+        self._add_section(
+            "Troubleshooting",
+            "If a table row shows an error, the property pair may be outside the valid range for that fluid.\n"
+            "If a saturation query fails, check that temperature is below the critical temperature and pressure is below the critical pressure.\n"
+            "If capillary flow is marked choked, reduce mass flow, increase diameter, or relax the pressure drop target.\n"
+            "If charts are blank, install matplotlib because plotting is optional in this app."
+        )
+
+    def _add_section(self, title, body):
+        card = ctk.CTkFrame(self, corner_radius=10)
+        card.pack(fill="x", pady=(0, 12))
+        ctk.CTkLabel(card, text=title, font=F_SECTION).pack(
+            anchor="w", padx=14, pady=(12, 6))
+        ctk.CTkLabel(
+            card,
+            text=body,
+            font=F_BODY,
+            wraplength=940,
+            justify="left",
+            anchor="w",
+        ).pack(anchor="w", fill="x", padx=14, pady=(0, 12))
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # MAIN APPLICATION
 # ═════════════════════════════════════════════════════════════════════════════
 
 NAV_ITEMS = [
-    ("state",     "⚛   State Point"),
-    ("sat",       "💧  Saturation"),
-    ("cycle",     "🔄  Refrig. Cycle"),
-    ("sizing",    "⚡  System Sizing"),
-    ("captube",   "🔧  Capillary Tube"),
-    ("fluidinfo", "📋  Fluid Info"),
-    ("charts",    "📊  Charts"),
+    ("howto",     "How To"),
+    ("state",     "State Point"),
+    ("sat",       "Saturation"),
+    ("cycle",     "Refrig. Cycle"),
+    ("sizing",    "System Sizing"),
+    ("captube",   "Capillary Tube"),
+    ("fluidinfo", "Fluid Reference"),
+    ("charts",    "Property Charts"),
+    ("tools",     "Quick Tools"),
 ]
 
 PAGE_MAP = {
+    "howto":     HowToPage,
     "state":     StatePointPage,
     "sat":       SaturationPage,
     "cycle":     CyclePage,
@@ -1868,6 +2491,7 @@ PAGE_MAP = {
     "captube":   CapTubePage,
     "fluidinfo": FluidInfoPage,
     "charts":    ChartPage,
+    "tools":     QuickToolsPage,
 }
 
 
@@ -1887,28 +2511,29 @@ class App(ctk.CTk):
     # ── Sidebar ───────────────────────────────────────────────────────────────
     def _build_sidebar(self):
         sb = ctk.CTkFrame(self, width=215, corner_radius=0,
-                          fg_color=("#1a1a2e", "#16213e"))
+                          fg_color=("#1c1c1c", "#1c1c1c"))
         sb.grid(row=0, column=0, sticky="nsew")
         sb.grid_rowconfigure(len(NAV_ITEMS) + 3, weight=1)
 
         ctk.CTkLabel(
             sb, text="CoolProp",
-            font=ctk.CTkFont(size=24, weight="bold"),
-            text_color=("#4a90d9", "#5ba3f5")).grid(
+            font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=("#a0a8b0", "#a0a8b0")).grid(
             row=0, column=0, padx=20, pady=(24, 2))
         ctk.CTkLabel(
             sb, text="Thermodynamic Calculator",
-            font=ctk.CTkFont(size=11),
-            text_color="gray55").grid(
+            font=ctk.CTkFont(size=10),
+            text_color="gray40").grid(
             row=1, column=0, padx=20, pady=(0, 22))
 
         self._nav = {}
         for i, (key, label) in enumerate(NAV_ITEMS, start=2):
             btn = ctk.CTkButton(
-                sb, text=label, anchor="w", width=195, height=40,
-                corner_radius=8, font=ctk.CTkFont(size=13),
+                sb, text=label, anchor="w", width=195, height=38,
+                corner_radius=4, font=ctk.CTkFont(size=12),
                 fg_color="transparent",
-                hover_color=("#2a3a4e", "#1e3050"),
+                hover_color=("#2d2d2d", "#2d2d2d"),
+                text_color=("#c0c8d0", "#c0c8d0"),
                 command=lambda k=key: self._show(k))
             btn.grid(row=i, column=0, padx=10, pady=3)
             self._nav[key] = btn
@@ -1926,24 +2551,27 @@ class App(ctk.CTk):
 
     # ── Main area ─────────────────────────────────────────────────────────────
     def _build_main(self):
-        main = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
-        main.grid(row=0, column=1, sticky="nsew", padx=14, pady=14)
-        main.grid_columnconfigure(0, weight=1)
-        main.grid_rowconfigure(0, weight=1)
-
-        self._pages: dict[str, ctk.CTkScrollableFrame] = {}
-        for key, cls in PAGE_MAP.items():
-            pg = cls(main)
-            pg.grid(row=0, column=0, sticky="nsew")
-            self._pages[key] = pg
+        self._main = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        self._main.grid(row=0, column=1, sticky="nsew", padx=14, pady=14)
+        self._main.grid_columnconfigure(0, weight=1)
+        self._main.grid_rowconfigure(0, weight=1)
+        # Pages are built lazily on first visit to keep startup fast.
+        self._pages = {k: None for k in PAGE_MAP}
 
     def _show(self, key: str):
         for k, btn in self._nav.items():
             btn.configure(fg_color="transparent")
-        self._nav[key].configure(fg_color=("#1f538d", "#1a4a7a"))
+        self._nav[key].configure(fg_color=("#1a4060", "#1a4060"))
         for pg in self._pages.values():
-            pg.grid_remove()
-        self._pages[key].grid()
+            if pg is not None:
+                pg.grid_remove()
+        pg = self._pages[key]
+        if pg is None:
+            pg = PAGE_MAP[key](self._main)
+            pg.grid(row=0, column=0, sticky="nsew")
+            self._pages[key] = pg
+        else:
+            pg.grid()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
